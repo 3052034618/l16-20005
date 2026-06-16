@@ -29,10 +29,11 @@ function confidenceTextColor(c: number): string {
 }
 
 export default function Recommendation() {
-  const { recommendations, addTask } = useStore();
+  const { recommendations, addTask, getMaterialAlert } = useStore();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<MaterialFilter>("全部");
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [pausedTip, setPausedTip] = useState<string | null>(null);
 
   const filtered =
     filter === "全部"
@@ -52,6 +53,13 @@ export default function Recommendation() {
     .filter(Boolean) as Recommendation[];
 
   const applyParams = (rec: Recommendation) => {
+    const matAlert = getMaterialAlert(rec.materialType);
+    if (matAlert?.isPaused) {
+      setPausedTip(rec.materialType);
+      setTimeout(() => setPausedTip(null), 3000);
+      return;
+    }
+
     const task: SimulationTask = {
       id: v4(),
       name: `${rec.materialType}-推荐-${Date.now().toString(36).toUpperCase()}`,
@@ -98,6 +106,12 @@ export default function Recommendation() {
 
   return (
     <div className="animate-fade-in space-y-6">
+      {pausedTip && (
+        <div className="fixed right-6 top-20 z-50 rounded-lg border border-brand-red/40 bg-brand-red/10 px-4 py-3 text-sm text-brand-red shadow-lg animate-slide-in-right">
+          材料 {pausedTip} 已暂停，无法应用推荐参数
+        </div>
+      )}
+
       <div>
         <h2 className="flex items-center gap-2 text-2xl font-bold text-brand-text">
           <Lightbulb className="h-6 w-6 text-brand-cyan" />
@@ -133,21 +147,30 @@ export default function Recommendation() {
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {filtered.map((rec) => {
             const isSelected = compareIds.includes(rec.id);
+            const matAlert = getMaterialAlert(rec.materialType);
+            const isPaused = matAlert?.isPaused ?? false;
             return (
               <div
                 key={rec.id}
                 className={`card-hover rounded-xl border bg-brand-surface p-5 ${
                   isSelected ? "border-brand-cyan/50" : "border-brand-border"
-                }`}
+                } ${isPaused ? "opacity-60" : ""}`}
               >
                 <div className="mb-3 flex items-center justify-between">
-                  <span
-                    className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-                      MATERIAL_COLORS[rec.materialType] ?? "bg-brand-surface text-brand-text-muted"
-                    }`}
-                  >
-                    {rec.materialType}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                        MATERIAL_COLORS[rec.materialType] ?? "bg-brand-surface text-brand-text-muted"
+                      }`}
+                    >
+                      {rec.materialType}
+                    </span>
+                    {isPaused && (
+                      <span className="rounded-md bg-brand-red/20 px-2 py-0.5 text-[10px] font-medium text-brand-red">
+                        已暂停
+                      </span>
+                    )}
+                  </div>
                   <button
                     onClick={() => toggleCompare(rec.id)}
                     className={`rounded p-1 transition-colors ${
@@ -215,9 +238,15 @@ export default function Recommendation() {
                   </span>
                   <button
                     onClick={() => applyParams(rec)}
-                    className="flex items-center gap-1 rounded-lg bg-brand-cyan/10 px-4 py-2 text-xs font-medium text-brand-cyan transition-colors hover:bg-brand-cyan/20"
+                    disabled={isPaused}
+                    className={`flex items-center gap-1 rounded-lg px-4 py-2 text-xs font-medium transition-colors ${
+                      isPaused
+                        ? "cursor-not-allowed bg-brand-text-muted/20 text-brand-text-muted/60"
+                        : "bg-brand-cyan/10 text-brand-cyan hover:bg-brand-cyan/20"
+                    }`}
                   >
-                    <Zap className="h-3.5 w-3.5" />应用参数
+                    <Zap className="h-3.5 w-3.5" />
+                    {isPaused ? "材料已暂停" : "应用参数"}
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>

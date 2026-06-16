@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useStore } from "@/store";
 import { useNavigate } from "react-router-dom";
-import { FileText, Download, ChevronRight, Thermometer, Layers, TrendingUp } from "lucide-react";
+import { FileText, Download, ChevronRight, Thermometer, Layers, TrendingUp, Loader } from "lucide-react";
+import { generateReportPDF } from "@/utils/pdfExport";
 
 function formatDate(ts: number): string {
   const d = new Date(ts);
@@ -15,9 +17,10 @@ const MATERIAL_COLORS: Record<string, string> = {
   AlSi10Mg: "bg-brand-purple/15 text-brand-purple",
 };
 
-export default function Reports() {
+export default function ReportsPage() {
   const { reports, tasks } = useStore();
   const navigate = useNavigate();
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -112,9 +115,27 @@ export default function Reports() {
                     查看详情 <ChevronRight className="h-3.5 w-3.5" />
                   </button>
                   <button
-                    className="flex items-center gap-1 rounded-lg bg-brand-surface px-3 py-2 text-xs font-medium text-brand-text-muted transition-colors hover:bg-brand-border hover:text-brand-text"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExportingId(report.id);
+                      setTimeout(() => {
+                        generateReportPDF(report, task);
+                        setExportingId(null);
+                      }, 200);
+                    }}
+                    disabled={exportingId === report.id}
+                    className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                      exportingId === report.id
+                        ? "cursor-wait bg-brand-cyan/20 text-brand-cyan"
+                        : "bg-brand-surface text-brand-text-muted hover:bg-brand-border hover:text-brand-text"
+                    }`}
                   >
-                    <Download className="h-3.5 w-3.5" />PDF
+                    {exportingId === report.id ? (
+                      <Loader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
+                    {exportingId === report.id ? "生成中" : "PDF"}
                   </button>
                 </div>
               </div>

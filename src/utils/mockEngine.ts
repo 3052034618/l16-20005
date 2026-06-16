@@ -27,6 +27,7 @@ export class MockSimulationEngine {
   private storeHook: StoreHook;
   private simulationIntervals: Map<string, NodeJS.Timeout> = new Map();
   private monitoringIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private alertCooldowns: Map<string, number> = new Map();
 
   constructor(storeHook: StoreHook) {
     this.storeHook = storeHook;
@@ -90,6 +91,10 @@ export class MockSimulationEngine {
   startMonitoring(taskId: string): void {
     if (this.monitoringIntervals.has(taskId)) return;
 
+    const TEMP_THRESHOLD = 2200;
+    const COOLING_THRESHOLD = 1.2e6;
+    const ALERT_COOLDOWN_MS = 8000;
+
     const intervalId = setInterval(() => {
       const store = this.storeHook.getState();
       const task = store.getTaskById(taskId);
@@ -104,7 +109,9 @@ export class MockSimulationEngine {
 
       const temperature = 1800 + 400 * Math.sin(2 * Math.PI * 0.1 * t) + noise() * 30;
       const coolingRate = 1e6 + 3e5 * Math.sin(2 * Math.PI * 0.08 * t) + noise() * 2e4;
-      const thresholdExceeded = temperature > 2200 || coolingRate > 1.2e6;
+      const tempExceeded = temperature > TEMP_THRESHOLD;
+      const coolingExceeded = coolingRate > COOLING_THRESHOLD;
+      const thresholdExceeded = tempExceeded || coolingExceeded;
 
       const dataPoint: MonitoringData = {
         id: v4(),
@@ -116,6 +123,17 @@ export class MockSimulationEngine {
       };
 
       store.addMonitoringData(taskId, dataPoint);
+
+      if (thresholdExceeded) {
+        const lastAlertAt = this.alertCooldowns.get(taskId) ?? 0;
+        if (now - lastAlertAt > ALERT_COOLDOWN_MS) {
+          this.alertCooldowns.set(taskId, now);
+          this.generateRealtimeAlert(taskId, task.materialType, {
+            temperature: tempExceeded ? temperature : 0,
+            coolingRate: coolingExceeded ? coolingRate : 0,
+          });
+        }
+      }
     }, 500);
 
     this.monitoringIntervals.set(taskId, intervalId);
@@ -126,6 +144,42 @@ export class MockSimulationEngine {
     if (intervalId) {
       clearInterval(intervalId);
       this.monitoringIntervals.delete(taskId);
+    }
+  }
+
+  private generateRealtimeAlert(
+    taskId: string,
+    material: string,
+    values: { temperature: number; coolingRate: number }
+  ): void {
+    const store = this.storeHook.getState();
+
+    if (values.temperature > 0) {
+      const isCritical = values.temperature > 2400;
+      const alert: Alert = {
+        id: v4(),
+        taskId,
+        type: 'temperature',
+        severity: isCritical ? 'critical' : 'warning',
+        message: `${material} 熔池温度${isCritical ? '严重' : ''}超标，当前 ${values.temperature.toFixed(0)}°C，已超安全阈值`,
+        status: 'pending',
+        createdAt: Date.now(),
+      };
+      store.addAlert(alert);
+    }
+
+    if (values.coolingRate > 0) {
+      const isCritical = values.coolingRate > 1.4e6;
+      const alert: Alert = {
+        id: v4(),
+        taskId,
+        type: 'cooling_rate',
+        severity: isCritical ? 'critical' : 'warning',
+        message: `${material} 冷却速率${isCritical ? '严重' : ''}异常，当前 ${(values.coolingRate / 1e6).toFixed(2)}×10⁶ °C/s`,
+        status: 'pending',
+        createdAt: Date.now(),
+      };
+      store.addAlert(alert);
     }
   }
 

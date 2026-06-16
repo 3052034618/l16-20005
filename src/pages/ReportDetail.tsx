@@ -5,7 +5,9 @@ import * as echarts from "echarts/core";
 import { BarChart } from "echarts/charts";
 import { GridComponent, TooltipComponent, TitleComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import { ArrowLeft, Download, FileText, AlertTriangle, CheckCircle } from "lucide-react";
+import { ArrowLeft, Download, FileText, AlertTriangle, CheckCircle, Loader } from "lucide-react";
+import { useState } from "react";
+import { generateReportPDF } from "@/utils/pdfExport";
 
 echarts.use([BarChart, GridComponent, TooltipComponent, TitleComponent, CanvasRenderer]);
 
@@ -13,6 +15,7 @@ export default function ReportDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { reports, tasks } = useStore();
+  const [exporting, setExporting] = useState(false);
 
   const report = reports.find((r) => r.id === id);
   const task = report ? tasks.find((t) => t.id === report.taskId) : undefined;
@@ -236,8 +239,29 @@ export default function ReportDetail() {
         >
           返回列表
         </button>
-        <button className="flex items-center gap-2 rounded-lg bg-brand-cyan/10 px-5 py-2.5 text-sm font-medium text-brand-cyan transition-colors hover:bg-brand-cyan/20">
-          <Download className="h-4 w-4" />下载 PDF
+        <button
+          onClick={() => {
+            if (report) {
+              setExporting(true);
+              setTimeout(() => {
+                generateReportPDF(report, task);
+                setExporting(false);
+              }, 200);
+            }
+          }}
+          disabled={exporting}
+          className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors ${
+            exporting
+              ? "cursor-wait bg-brand-cyan/50 text-brand-bg/70"
+              : "bg-brand-cyan/10 text-brand-cyan hover:bg-brand-cyan/20"
+          }`}
+        >
+          {exporting ? (
+            <Loader className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          {exporting ? "生成中..." : "下载 PDF"}
         </button>
       </div>
     </div>
